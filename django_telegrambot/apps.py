@@ -10,7 +10,7 @@ from telegram.ext import Dispatcher
 from telegram.ext import Updater
 from telegram.error import InvalidToken, TelegramError
 from telegram.utils.request import Request
-from telegram.ext import messagequeue as mq
+from telegram.ext import messagequeue as mq, ExtBot
 from .mqbot import MQBot
 import os.path
 
@@ -162,15 +162,16 @@ class DjangoTelegramBot(AppConfig):
 
         for b in bots_list:
             token = b.get('TOKEN', None)
+            arbitrary_callback_data = b.get('ARBITRARY_CALLBACK_DATA', False)
             if not token:
                 break
 
             allowed_updates = b.get('ALLOWED_UPDATES', None)
             timeout = b.get('TIMEOUT', None)
             proxy = b.get('PROXY', None)
-            
+
             if self.mode == WEBHOOK_MODE:
-                try:              
+                try:
                     if b.get('MESSAGEQUEUE_ENABLED',False):
                         q = mq.MessageQueue(all_burst_limit=b.get('MESSAGEQUEUE_ALL_BURST_LIMIT',29),
                         all_time_limit_ms=b.get('MESSAGEQUEUE_ALL_TIME_LIMIT_MS',1024))
@@ -183,8 +184,11 @@ class DjangoTelegramBot(AppConfig):
                         request = None
                         if proxy:
                             request = Request(proxy_url=proxy['proxy_url'], urllib3_proxy_kwargs=proxy['urllib3_proxy_kwargs'])
-                        bot = telegram.Bot(token=token, request=request)
-                        
+                        if arbitrary_callback_data:
+                            bot = ExtBot(token=token, request=request, arbitrary_callback_data=True)
+                        else:
+                            bot = telegram.Bot(token=token, request=request)
+
                     DjangoTelegramBot.dispatchers.append(Dispatcher(bot, None, workers=0))
                     hookurl = '{}/{}/{}/'.format(webhook_site, webhook_base, token)
                     max_connections = b.get('WEBHOOK_MAX_CONNECTIONS', 40)
@@ -204,7 +208,7 @@ class DjangoTelegramBot(AppConfig):
 
             else:
                 try:
-                    updater = Updater(token=token, request_kwargs=proxy)
+                    updater = Updater(token=token, request_kwargs=proxy, arbitrary_callback_data=arbitrary_callback_data)
                     bot = updater.bot
                     bot.delete_webhook()
                     DjangoTelegramBot.updaters.append(updater)
