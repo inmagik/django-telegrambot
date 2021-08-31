@@ -3,6 +3,7 @@
 from django.apps import AppConfig
 from django.apps import apps
 from django.conf import settings
+from django.utils.module_loading import import_string
 import importlib
 import telegram
 from django.utils.module_loading import module_has_submodule
@@ -166,6 +167,25 @@ class DjangoTelegramBot(AppConfig):
             if not token:
                 break
 
+            persistence = None
+            create_persistence_import = b.get('CREATE_PERSISTENCE', None)
+            if create_persistence_import:
+                try:
+                    create_persistence = import_string(create_persistence_import)
+                    persistence = create_persistence()
+                except ImportError:
+                    pass
+
+            context_types = None
+            create_context_types_import = b.get('CREATE_CONTEXT_TYPES', None)
+            if create_context_types_import:
+                try:
+                    create_context_types = import_string(create_context_types_import)
+                    context_types = create_context_types()
+                except ImportError:
+                    pass
+
+
             allowed_updates = b.get('ALLOWED_UPDATES', None)
             timeout = b.get('TIMEOUT', None)
             proxy = b.get('PROXY', None)
@@ -189,7 +209,7 @@ class DjangoTelegramBot(AppConfig):
                         else:
                             bot = telegram.Bot(token=token, request=request)
 
-                    DjangoTelegramBot.dispatchers.append(Dispatcher(bot, None, workers=0))
+                    DjangoTelegramBot.dispatchers.append(Dispatcher(bot, None, workers=0, persistence=persistence, context_types=context_types))
                     hookurl = '{}/{}/{}/'.format(webhook_site, webhook_base, token)
                     max_connections = b.get('WEBHOOK_MAX_CONNECTIONS', 40)
                     setted = bot.setWebhook(hookurl, certificate=certificate, timeout=timeout, max_connections=max_connections, allowed_updates=allowed_updates)
@@ -208,7 +228,7 @@ class DjangoTelegramBot(AppConfig):
 
             else:
                 try:
-                    updater = Updater(token=token, request_kwargs=proxy, arbitrary_callback_data=arbitrary_callback_data)
+                    updater = Updater(token=token, request_kwargs=proxy, arbitrary_callback_data=arbitrary_callback_data, persistence=persistence, context_types=context_types)
                     bot = updater.bot
                     bot.delete_webhook()
                     DjangoTelegramBot.updaters.append(updater)
