@@ -6,6 +6,7 @@ from django.conf import settings
 from django.utils.module_loading import import_string
 import importlib
 import telegram
+from telegram.error import RetryAfter
 from django.utils.module_loading import module_has_submodule
 from telegram.ext import Dispatcher
 from telegram.ext import Updater
@@ -212,7 +213,16 @@ class DjangoTelegramBot(AppConfig):
                     DjangoTelegramBot.dispatchers.append(Dispatcher(bot, None, workers=0, persistence=persistence, context_types=context_types))
                     hookurl = '{}/{}/{}/'.format(webhook_site, webhook_base, token)
                     max_connections = b.get('WEBHOOK_MAX_CONNECTIONS', 40)
-                    setted = bot.setWebhook(hookurl, certificate=certificate, timeout=timeout, max_connections=max_connections, allowed_updates=allowed_updates)
+                    _retry_webhook = True
+                    while _retry_webhook:
+                        try:
+                            setted = bot.setWebhook(hookurl, certificate=certificate, timeout=timeout, max_connections=max_connections, allowed_updates=allowed_updates)
+                            _retry_webhook = False
+                        except RetryAfter as e:
+                            logger.warn(str(e))
+                            logger.warn("Just sleep and retry...")
+                            import time
+                            time.sleep(e.retry_after)
                     webhook_info = bot.getWebhookInfo()
                     real_allowed = webhook_info.allowed_updates if webhook_info.allowed_updates else ["ALL"]
 
